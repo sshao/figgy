@@ -17,46 +17,34 @@ class Figgy
     # @return Whatever was in the config file loaded
     # @raise [Figgy::FileNotFound] if no config file could be found for +name+
     def load(name)
-      files = files_for(name)
-      if files.empty?
+      # TODO: does this work on a Vault overlay where there's no matching namespace?
+      if @config.overlays.map { |overlay| overlay.files_for(name) }.flatten.empty?
         raise(Figgy::FileNotFound, "Can't find config files for key: #{name.inspect}")
       end
 
-      final_result = files.reduce(nil) do |result, file|
-        object = @config.handler_for(file).call(File.read(file))
-        if result && result.respond_to?(:merge)
-          deep_merge(result, object)
-        else
-          object
+      final_result = @config.overlays.reduce(nil) do |result, overlay|
+        overlay.files_for(name).each do |file|
+          object = overlay.fetch(file)
+
+          if result && result.respond_to?(:merge)
+            result = deep_merge(result, object)
+          else
+            result = object
+          end
         end
+
+        result
       end
 
       deep_freeze(to_figgy_hash(final_result))
     end
 
-    # @param [String] name the configuration key to search for
-    # @return [Array<String>] the paths to all files to load for configuration key +name+
-    def files_for(name)
-      Dir[*file_globs(name)]
-    end
-
     # @return [Array<String>] the names of all unique configuration keys
     def all_key_names
-      Dir[*file_globs].map { |file| File.basename(file).sub(/\..+$/, '') }.uniq
+      @config.overlays.map { |overlay| overlay.all_keys }.flatten.uniq
     end
 
     private
-
-    def file_globs(name = '*')
-      globs = extension_globs(name)
-      @config.overlay_dirs.map { |dir|
-        globs.map { |glob| File.join(dir, glob) }
-      }.flatten
-    end
-
-    def extension_globs(name = '*')
-      @config.extensions.map { |ext| "#{name}.#{ext}" }
-    end
 
     def to_figgy_hash(obj)
       case obj

@@ -49,9 +49,12 @@ describe Figgy do
       write_config 'values.yml', 'foo: 1'
       write_config 'values.yaml', 'foo: 2'
 
-      config = test_config do |cfg|
-        cfg.define_handler('yml', 'yaml') { |body| YAML.load(body) }
-      end
+      # TODO: this functionality no longer exists...
+      # config = test_config do |cfg|
+      #   cfg.define_overlay('yml', 'yaml') { |body| YAML.load(body) }
+      # end
+      config = test_config
+
       expect(config.values.foo).to eq(2)
     end
   end
@@ -366,6 +369,17 @@ describe Figgy do
       end
 
       expect(config.keys).to eq({ "foo" => 3 })
+    end
+
+    it 'does not allow combination with Vault' do
+      expect {
+        test_config do |cfg|
+          cfg.define_overlay :default, nil
+          cfg.define_overlay :environment, 'prod'
+          cfg.define_vault_overlay :country, instance_double(Vault::Client)
+          cfg.define_combined_overlay :environment, :country
+        end
+      }.to raise_error('Cannot define combined overlay with Vault overlay: :country')
     end
   end
 
